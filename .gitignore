@@ -65,6 +65,9 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
+# Node.js stuff:
+node_modules/
+
 # Scrapy stuff:
 .scrapy
 
@@ -172,3 +175,4 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+/backend/.env
