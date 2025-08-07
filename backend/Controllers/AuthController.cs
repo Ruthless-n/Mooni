@@ -5,11 +5,11 @@ using backend.Models;
 
 [ApiController]
 [Route("api/[controller]")]
-public class UserController : ControllerBase
+public class AuthController : ControllerBase
 {
     private readonly _dbContext? _context;
 
-    public UserController(_dbContext context)
+    public AuthController(_dbContext context)
     {
         _context = context;
     }

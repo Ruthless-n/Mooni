@@ -9,7 +9,7 @@ namespace backend.Data
         {
             Env.Load();
 
-            var connString = Environment.GetEnvironmentVariable("CONN_STRING");
+            var connString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
 
             if (string.IsNullOrEmpty(connString))
             {
