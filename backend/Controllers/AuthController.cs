@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Identity;
-using BCrypt.Net;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+
 using backend.Data;
 using backend.Models;
 
@@ -39,7 +41,7 @@ public class AuthController : ControllerBase
 
         var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
         if (existingUser != null)
-            return BadRequest("User already exists.");
+            return BadRequest("Usuário já existe em nosso sistema.");
 
         var user = MapToUser(dto);
         NormalizeBirthDate(user);
@@ -55,14 +57,13 @@ public class AuthController : ControllerBase
         return CreatedAtAction(nameof(GetUsers), user);
     }
 
-    // Valida dados obrigatórios do DTO
     private bool IsUserDataValid(UserCreateDTO dto, out string? error)
     {
         if (string.IsNullOrWhiteSpace(dto.Name) ||
             string.IsNullOrWhiteSpace(dto.Email) ||
             string.IsNullOrWhiteSpace(dto.Password))
         {
-            error = "User data is incomplete.";
+            error = "Dados do usuário incompletos.";
             return false;
         }
         error = null;
@@ -88,12 +89,12 @@ public class AuthController : ControllerBase
         var now = DateTime.UtcNow;
         if (birthDate > now)
         {
-            error = "Birth date cannot be in the future.";
+            error = "Data de nascimento inválida.";
             return false;
         }
         if (birthDate < now.AddYears(-120))
         {
-            error = "Birth date is too far in the past.";
+            error = "Data de nascimento muito antiga.";
             return false;
         }
         error = null;
@@ -110,13 +111,13 @@ public class AuthController : ControllerBase
         }
         if (checkUser.Email == null || checkUser.Password == null)
         {
-            return BadRequest("Email and password are required.");
+            return BadRequest("Por favor, insira seu email e senha.");
         }
 
         var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == checkUser.Email);
         if (existingUser == null || !BCrypt.Net.BCrypt.Verify(checkUser.Password, existingUser.Password))
         {
-            return Unauthorized("Invalid email or password.");
+            return Unauthorized("Email ou senha inválidos.");
         }
 
         return Ok(existingUser);
@@ -134,13 +135,13 @@ public class AuthController : ControllerBase
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user == null)
         {
-            return BadRequest("Invalid email.");
+            return BadRequest("Email inválido.");
         }
 
-        // Generate a password reset token (this is just a placeholder, implement your own logic)
-        var token = Guid.NewGuid().ToString();
+        var token = new JwtSecurityToken(
+            expires: DateTime.UtcNow.AddMinutes(Convert.ToDouble(Config.LoadJwtExpiration()))
+        );
 
-        // Here you would typically send the token to the user's email
-        return Ok(new { Token = token });
+        return Ok(new { Token = new JwtSecurityTokenHandler().WriteToken(token) });
     }
 }
