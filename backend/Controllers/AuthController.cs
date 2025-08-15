@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -128,20 +129,81 @@ public class AuthController : ControllerBase
     public async Task<ActionResult> GetPasswordResetToken([FromQuery] string email)
     {
         if (_context == null)
-        {
             return NotFound();
-        }
 
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user == null)
+            return BadRequest("Invalid email.");
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Config.GetJwtSecret()));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var claims = new[]
         {
-            return BadRequest("Email inválido.");
-        }
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new Claim(JwtRegisteredClaimNames.Email, user.Email)
+        };
 
         var token = new JwtSecurityToken(
-            expires: DateTime.UtcNow.AddMinutes(Convert.ToDouble(Config.LoadJwtExpiration()))
+            issuer: "Mooni",
+            audience: "Mooni",
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(Convert.ToDouble(Config.LoadJwtExpiration())),
+            signingCredentials: creds
         );
 
-        return Ok(new { Token = new JwtSecurityTokenHandler().WriteToken(token) });
+        var jwtToken = new JwtSecurityTokenHandler().WriteToken(token);
+
+        return Ok(new { Token = jwtToken });
     }
+
+
+    [HttpPut]
+    [Route("password/reset")]
+    public async Task<ActionResult> ResetPassword([FromQuery] string token, [FromQuery] string newPassword)
+    {
+        if (_context == null)
+            return NotFound();
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = Encoding.UTF8.GetBytes(Config.GetJwtSecret());
+
+        try
+        {
+            var principal = tokenHandler.ValidateToken(token, new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(key),
+                ValidateIssuer = true,
+                ValidIssuer = "Mooni",
+                ValidateAudience = true,
+                ValidAudience = "Mooni",
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero
+            }, out SecurityToken validatedToken);
+
+            var userIdClaim = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+                return BadRequest("Invalid token.");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+
+            if (user == null)
+                return BadRequest("Invalid token.");
+
+            user.Password = BCrypt.Net.BCrypt.HashPassword(newPassword);
+            await _context.SaveChangesAsync();
+
+            return Ok("Password successfully changed.");
+        }
+        catch (SecurityTokenExpiredException)
+        {
+            return BadRequest("Token has expired.");
+        }
+        catch
+        {
+            return BadRequest("Invalid token.");
+        }
+    }
+
 }

@@ -20,7 +20,7 @@ namespace backend.Data
                 options.UseNpgsql(connString));
         }
 
-        public static string LoadJwt()
+        public static string GetJwtSecret()
         {
             var secretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY");
 
